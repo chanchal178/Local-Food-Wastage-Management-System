@@ -1,3 +1,4 @@
+import mysql.connector
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -10,10 +11,18 @@ st.set_page_config(
 )
 
 # Load Data
-providers = pd.read_csv("data/providers_data.csv")
-receivers = pd.read_csv("data/receivers_data.csv")
-food = pd.read_csv("data/food_listings_data.csv")
-claims = pd.read_csv("data/claims_data.csv")
+providers = pd.read_csv("providers_data.csv")
+receivers = pd.read_csv("receivers_data.csv")
+food = pd.read_csv("food_listings_data.csv")
+claims = pd.read_csv("claims_data.csv")
+
+def get_connection():
+    return mysql.connector.connect(
+        host="localhost",
+        user="root",
+        password="root123",
+        database="food_waste_db"
+    )
 
 # Title
 st.title("🍲 Local Food Wastage Management System")
@@ -228,37 +237,141 @@ elif page == "CRUD":
 
     st.header("CRUD Operations")
 
-    st.subheader("Add New Food Record")
-
-    food_id = st.number_input("Food ID", min_value=1)
-    food_name = st.text_input("Food Name")
-    quantity = st.number_input("Quantity", min_value=1)
-    expiry_date = st.text_input("Expiry Date (YYYY-MM-DD)")
-    provider_id = st.number_input("Provider ID", min_value=1)
-    provider_type = st.text_input("Provider Type")
-    location = st.text_input("Location")
-    food_type = st.selectbox(
-        "Food Type",
-        ["Vegetarian", "Non-Vegetarian", "Vegan"]
-    )
-    meal_type = st.selectbox(
-        "Meal Type",
-        ["Breakfast", "Lunch", "Dinner", "Snacks"]
+    action = st.selectbox(
+        "Select Operation",
+        ["Create", "Update", "Delete", "View Records"]
     )
 
-    if st.button("Add Food"):
+    # CREATE
+    if action == "Create":
 
-        new_record = pd.DataFrame({
-            "Food_ID": [food_id],
-            "Food_Name": [food_name],
-            "Quantity": [quantity],
-            "Expiry_Date": [expiry_date],
-            "Provider_ID": [provider_id],
-            "Provider_Type": [provider_type],
-            "Location": [location],
-            "Food_Type": [food_type],
-            "Meal_Type": [meal_type]
-        })
+        food_id = st.number_input("Food ID", min_value=1)
+        food_name = st.text_input("Food Name")
+        quantity = st.number_input("Quantity", min_value=1)
+        expiry_date = st.text_input("Expiry Date (YYYY-MM-DD)")
+        provider_id = st.number_input("Provider ID", min_value=1)
+        provider_type = st.text_input("Provider Type")
+        location = st.text_input("Location")
 
-        st.success("Food Record Added Successfully!")
-        st.dataframe(new_record)
+        food_type = st.selectbox(
+            "Food Type",
+            ["Vegetarian", "Non-Vegetarian", "Vegan"]
+        )
+
+        meal_type = st.selectbox(
+            "Meal Type",
+            ["Breakfast", "Lunch", "Dinner", "Snacks"]
+        )
+
+        if st.button("Add Food"):
+
+            conn = get_connection()
+            cursor = conn.cursor()
+
+            query = """
+            INSERT INTO food_listings
+            (Food_ID, Food_Name, Quantity, Expiry_Date,
+            Provider_ID, Provider_Type, Location,
+            Food_Type, Meal_Type)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            """
+
+            values = (
+                food_id,
+                food_name,
+                quantity,
+                expiry_date,
+                provider_id,
+                provider_type,
+                location,
+                food_type,
+                meal_type
+            )
+
+            cursor.execute(query, values)
+            conn.commit()
+
+            cursor.close()
+            conn.close()
+
+            st.success("Record Added Successfully!")
+
+    # UPDATE
+    elif action == "Update":
+
+        food_id = st.number_input(
+            "Food ID to Update",
+            min_value=1
+        )
+
+        new_quantity = st.number_input(
+            "New Quantity",
+            min_value=1
+        )
+
+        if st.button("Update Record"):
+
+            conn = get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute(
+                """
+                UPDATE food_listings
+                SET Quantity=%s
+                WHERE Food_ID=%s
+                """,
+                (new_quantity, food_id)
+            )
+
+            conn.commit()
+
+            cursor.close()
+            conn.close()
+
+            st.success("Record Updated Successfully!")
+
+    # DELETE
+    elif action == "Delete":
+
+        food_id = st.number_input(
+            "Food ID to Delete",
+            min_value=1
+        )
+
+        if st.button("Delete Record"):
+
+            conn = get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute(
+                """
+                DELETE FROM food_listings
+                WHERE Food_ID=%s
+                """,
+                (food_id,)
+            )
+
+            conn.commit()
+
+            cursor.close()
+            conn.close()
+
+            st.success("Record Deleted Successfully!")
+
+    # VIEW
+    elif action == "View Records":
+
+        conn = get_connection()
+
+        query = """
+        SELECT *
+        FROM food_listings
+        ORDER BY Food_ID DESC
+        LIMIT 50
+        """
+
+        df = pd.read_sql(query, conn)
+
+        st.dataframe(df)
+
+        conn.close()
